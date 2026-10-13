@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  # ----------------------------------------------------
+  # 1. Express Backend Service
+  # ----------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: factoryflow_app
+    restart: always
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      - PORT=${PORT:-3000}
+      - NODE_ENV=development
+      - MONGO_URI=mongodb://mongo:27017/factoryflow?replicaSet=rs0
+      - JWT_SECRET=${JWT_SECRET:-supersecretkeyfactoryflow2026}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-1d}
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  # ----------------------------------------------------
+  # 2. MongoDB Service (Single-Node Replica Set)
+  # ----------------------------------------------------
+  mongo:
+    image: mongo:7
+    container_name: factoryflow_mongo
+    restart: always
+    ports:
+      - "27017:27017"
+    entrypoint: [ "/usr/bin/mongod", "--bind_ip_all", "--replSet", "rs0" ]
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ----------------------------------------------------
+  # 3. Automatic Replica Set Initializer
+  # ----------------------------------------------------
+  mongo-init-replica:
+    image: mongo:7
+    container_name: factoryflow_mongo_init
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: "no"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        mongosh --host mongo:27017 <<EOF
+        var cfg = rs.status();
+        if (cfg.ok === 0) {
+          rs.initiate({
+            _id: 'rs0',
+            members: [ { _id: 0, host: 'mongo:27017' } ]
+          });
+          print('Replica Set rs0 initialized successfully!');
+        } else {
+          print('Replica Set rs0 already initialized.');
+        }
+        EOF
+
+volumes:
+  mongo_data:
+    driver: local

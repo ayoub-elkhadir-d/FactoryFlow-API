@@ -1,0 +1,34 @@
+{
+  "name": "factoryflow-api",
+  "version": "1.0.0",
+  "description": "API sécurisée de gestion des ordres de fabrication et des matières premières",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "test": "jest --runInBand --detectOpenHandles"
+  },
+  "keywords": [
+    "nodejs",
+    "express",
+    "mongodb",
+    "mongoose",
+    "jwt",
+    "factoryflow"
+  ],
+  "author": "Ayoub El Khadir",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.3.1",
+    "swagger-ui-express": "^5.0.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "nodemon": "^3.1.0"
+  }
+}
