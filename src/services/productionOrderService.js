@@ -1,15 +1,83 @@
 const mongoose = require("mongoose");
 const AppError = require("../utils/AppError");
 const { OPERATOR } = require("../constants/roles");
-const { PLANIFIED, IN_PROGRESS, CANCELLED, COMPLETED } = require("../constants/status");
+const {
+  PLANIFIED,
+  IN_PROGRESS,
+  COMPLETED,
+  CANCELLED,
+} = require("../constants/status");
+const { EXIT } = require("../constants/stockMovementTypes");
 const productRepository = require("../repositories/productRepository");
 const productionOrderRepository = require("../repositories/productionOrderRepository");
-const userRepository = require("../repositories/userRepository");
-const { EXIT } = require("../constants/stockMovementTypes");
 const rawMaterialRepository = require("../repositories/rawMaterialRepository");
 const stockMovementRepository = require("../repositories/stockMovementRepository");
+const userRepository = require("../repositories/userRepository");
 
 class ProductionOrderService {
+  async getAll(query = {}, user) {
+    const page = Number(query.page || 1);
+    const limit = Number(query.limit || 20);
+    if (!Number.isInteger(page) || page < 1 || !Number.isInteger(limit) || limit < 1 || limit > 100) {
+      throw new AppError("page must be positive and limit must be between 1 and 100", 400);
+    }
+
+    const filter = {};
+    if (user.role === OPERATOR) filter.operator = user.id;
+    if (query.status) {
+      const allowedStatuses = [PLANIFIED, IN_PROGRESS, COMPLETED, CANCELLED];
+      if (!allowedStatuses.includes(query.status)) {
+        throw new AppError("Invalid order status", 400);
+      }
+      filter.status = query.status;
+    }
+
+    if (query.product) {
+      if (!mongoose.isValidObjectId(query.product)) {
+        throw new AppError("Invalid product ID", 400);
+      }
+      filter.product = query.product;
+    }
+
+    if (query.from || query.to) {
+      filter.createdAt = {};
+      if (query.from) {
+        const from = new Date(query.from);
+        if (Number.isNaN(from.getTime())) throw new AppError("Invalid from date", 400);
+        filter.createdAt.$gte = from;
+      }
+      if (query.to) {
+        const to = new Date(query.to);
+        if (Number.isNaN(to.getTime())) throw new AppError("Invalid to date", 400);
+        filter.createdAt.$lte = to;
+      }
+    }
+
+    const skip = (page - 1) * limit;
+    const [orders, total] = await Promise.all([
+      productionOrderRepository.findAll(filter, skip, limit),
+      productionOrderRepository.count(filter),
+    ]);
+    return { orders, pagination: { page, limit, total, pages: Math.ceil(total / limit) } };
+  }
+
+  getHistory(userId, query = {}) {
+    return this.getAll(
+      { ...query, status: COMPLETED },
+      { id: userId, role: OPERATOR }
+    );
+  }
+
+  async getById(id, user) {
+    this.validateId(id, "order");
+    const order = await productionOrderRepository.findById(id);
+    if (!order) throw new AppError("Production order not found", 404);
+    if (user.role === OPERATOR && order.operator.toString() !== user.id) {
+      throw new AppError("You do not have access to this production order", 403);
+    }
+    return order;
+  }
+
   async create(input = {}, userId) {
     const { product, quantity, operator, plannedStartDate, plannedEndDate, notes } = input || {};
     this.validateId(product, "product");
@@ -233,4 +301,5 @@ class ProductionOrderService {
   }
 }
 
+module.exports = new ProductionOrderService();
 module.exports = new ProductionOrderService();
